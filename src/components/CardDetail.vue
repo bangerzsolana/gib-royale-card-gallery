@@ -78,9 +78,6 @@
             Effective DMG: <strong>{{ effectiveDmg }}</strong> |
             Effective HP: <strong>{{ effectiveHP }}</strong>
           </div>
-          <div v-if="realtime.specialEvent" class="special-event">
-            {{ realtime.specialEvent === 'Rug Pull' ? 'UNIT EXPLODES! 50 area damage to nearby troops' : '2x DAMAGE BUFF for 5 seconds (gold tint)' }}
-          </div>
         </div>
       </div>
 
@@ -109,23 +106,6 @@
             </tr>
           </tbody>
         </table>
-      </div>
-
-      <!-- Special Events -->
-      <div class="section">
-        <h3>Special Events</h3>
-        <div class="event-row">
-          <div class="event-card rug" :class="{ triggered: realtime.specialEvent === 'Rug Pull' }">
-            <div class="event-name">Rug Pull</div>
-            <div class="event-trigger">Token dumps >25%</div>
-            <div class="event-effect">Unit explodes, 50 area damage to ALL nearby troops (both sides)</div>
-          </div>
-          <div class="event-card moon" :class="{ triggered: realtime.specialEvent === 'Moon Shot' }">
-            <div class="event-name">Moon Shot</div>
-            <div class="event-trigger">Token pumps >50%</div>
-            <div class="event-effect">2x damage buff for 5 seconds, gold tint visual</div>
-          </div>
-        </div>
       </div>
 
       <!-- Elixir Cost -->
@@ -240,8 +220,6 @@ const cardBg = computed(() => ({
 
 const realtimeBg = computed(() => {
   const r = realtime.value
-  if (r.specialEvent === 'Rug Pull') return { background: 'rgba(255,0,0,0.15)', border: '1px solid #ff0000' }
-  if (r.specialEvent === 'Moon Shot') return { background: 'rgba(255,215,0,0.15)', border: '1px solid #ffd700' }
   if (r.pct > 1) return { background: 'rgba(68,255,68,0.08)', border: '1px solid rgba(68,255,68,0.3)' }
   if (r.pct < -1) return { background: 'rgba(255,68,68,0.08)', border: '1px solid rgba(255,68,68,0.3)' }
   return { background: 'rgba(255,255,255,0.03)', border: '1px solid #333' }
@@ -361,17 +339,6 @@ function formatMarketCap(cap) {
 .threshold-table td { padding: 4px 8px; color: #aaa; border-bottom: 1px solid #222; }
 .threshold-table tr.highlight { background: rgba(255,255,255,0.05); }
 .threshold-table tr.highlight td { color: #fff; font-weight: 700; }
-
-.event-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.event-card { border-radius: 8px; padding: 10px; opacity: 0.5; }
-.event-card.triggered { opacity: 1; }
-.event-card.rug { background: rgba(255,0,0,0.1); border: 1px solid rgba(255,0,0,0.3); }
-.event-card.moon { background: rgba(255,215,0,0.1); border: 1px solid rgba(255,215,0,0.3); }
-.event-name { font-size: 14px; font-weight: 800; margin-bottom: 2px; }
-.event-card.rug .event-name { color: #ff4444; }
-.event-card.moon .event-name { color: #ffd700; }
-.event-trigger { font-size: 10px; color: #888; }
-.event-effect { font-size: 10px; color: #aaa; margin-top: 4px; }
 
 .elixir-display { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .elixir-circle { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; color: #fff; }

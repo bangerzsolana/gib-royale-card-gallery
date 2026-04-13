@@ -241,12 +241,6 @@ onUnmounted(() => {
         <div class="legend-item">
           <strong>DEF boost</strong> = Coin is dumping (negative momentum)
         </div>
-        <div class="legend-item">
-          <strong>Rug Pull</strong> = Dumps >25% -> unit explodes (area damage)
-        </div>
-        <div class="legend-item">
-          <strong>Moon Shot</strong> = Pumps >50% -> 2x damage buff (5 sec)
-        </div>
       </div>
     </footer>
   </div>

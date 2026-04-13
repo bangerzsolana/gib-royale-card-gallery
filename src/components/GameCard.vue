@@ -92,15 +92,11 @@ const formattedPrice = computed(() => {
 const realtime = computed(() => priceService.getRealtimeMultipliers(props.token.id))
 
 const realtimeLabel = computed(() => {
-  const r = realtime.value
-  if (r.specialEvent) return r.specialEvent
-  return r.label
+  return realtime.value.label
 })
 
 const multBarStyle = computed(() => {
   const r = realtime.value
-  if (r.specialEvent === 'Rug Pull') return { background: '#ff0000', color: '#fff' }
-  if (r.specialEvent === 'Moon Shot') return { background: '#ffd700', color: '#000' }
   if (r.pct > 1) return { background: 'rgba(68,255,68,0.2)', color: '#44ff44' }
   if (r.pct < -1) return { background: 'rgba(255,68,68,0.2)', color: '#ff4444' }
   return { background: 'rgba(255,255,255,0.05)', color: '#888' }
