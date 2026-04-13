@@ -1,0 +1,449 @@
+/**
+ * PriceService — fetches live price data from Pyth Network + Railway API
+ * Standalone version for the Card Gallery app.
+ *
+ * Mirrors the game's PriceService but as a reactive data layer.
+ */
+
+const POWER_SCALE = 1000;
+const HERMES_URL = 'https://hermes.pyth.network/v2/updates/price/latest';
+const RAILWAY_API_URL = 'https://uniblock-migration-production.up.railway.app/api/latest';
+
+const NON_PYTH_COINS = [
+  'AURA', 'NPC', 'USDUC', 'STNK', 'DOG', 'MPLX', 'LABUBU',
+  'CARDS', 'SAVE', 'PURPE', 'SNS', 'STEP', 'SIGMA', 'PLAY', 'GLDX',
+  'SCF', 'CWIF', 'LETSBONK', 'MAX', 'POWSCHE', 'ROCKY', 'SILLY',
+  'SKR', 'VX', 'BRK.BX', 'CHONKY',
+];
+
+const PYTH_COINS = [
+  // Meme / Solana tokens
+  { symbol: 'BONK',     feedId: '72b021217ca3fe68922a19aaf990109cb9d84e9ad004b4d2025ad6f529314419' },
+  { symbol: 'WIF',      feedId: '4ca4beeca86f0d164160323817a4e42b10010a724c2217c6ee41b54cd4cc61fc' },
+  { symbol: 'POPCAT',   feedId: 'b9312a7ee50e189ef045aa3c7842e099b061bd9bdc99ac645956c3b660dc8cce' },
+  { symbol: 'WEN',      feedId: '5169491cd7e2a44c98353b779d5eb612e4ac32e073f5cc534303d86307c2f1bc' },
+  { symbol: 'TRUMP',    feedId: '879551021853eec7a7dc827578e8e69da7e4fa8148339aa0d3d5296405be4b1a' },
+  { symbol: 'FARTCOIN', feedId: '58cd29ef0e714c5affc44f269b2c1899a52da4169d7acc147b9da692e6953608' },
+  { symbol: 'PNUT',     feedId: '116da895807f81f6b5c5f01b109376e7f6834dc8b51365ab7cdfa66634340e54' },
+  { symbol: 'MOODENG',  feedId: 'ffff73128917a90950cd0473fd2551d7cd274fd5a6cc45641881bbcc6ee73417' },
+  { symbol: 'GRIFFAIN', feedId: '159b86e6ca1a2a6bd613953d1cd46008bd1200284bebc3e4c7cc36c3aa3edda9' },
+  { symbol: 'ZEREBRO',  feedId: '3dd13bf483f196da0429b354db1fa4802ff6a5c19c559a6abdd9a92707f426dc' },
+  { symbol: 'MELANIA',  feedId: '8fef7d52c7f4e3a6258d663f9d27e64a1b6fd95ab5f7d545dbf9a515353d0064' },
+  { symbol: 'FWOG',     feedId: '656cc2a39dd795bdecb59de810d4f4d1e74c25fe4c42d0bf1c65a38d74df48e9' },
+  { symbol: 'SEND',     feedId: '7d19b607c945f7edf3a444289c86f7b58dcd8b18df82deadf925074807c99b59' },
+  { symbol: 'RETARDIO', feedId: '527f38d4b210854189c2e7487e57297d7ddbdea1b23a5e8a6a5bbc98944abe93' },
+  { symbol: 'VINE',     feedId: '22a54087e443d4d1db5bd018923337c72c818a99ca521ead71f72fa058f1ccf1' },
+  { symbol: 'BAN',      feedId: 'a6320c8329924601f4d092dd3f562376f657fa0b5d0cba9e4385a24aaf135384' },
+  { symbol: 'AIXBT',    feedId: '0fc54579a29ba60a08fdb5c28348f22fd3bec18e221dd6b90369950db638a5a7' },
+  { symbol: 'ELIZA',    feedId: '0e0fe74b2bc91e867d7f46757faf64c5a497c11515956d7016ae97493f5f6ff4' },
+  { symbol: 'ELON',     feedId: 'c9cf25cd0df326b7fb3548b37d38e1e5c6ba202188a44ad98b79335c2b202f7b' },
+  { symbol: 'PUMP',     feedId: '7a01fca212788bba7c5bf8c9efd576a8a722f070d2c17596ff7bb609b8d5c3b9' },
+  { symbol: 'BIO',      feedId: 'd9d22050e7413a16129f1334cd4dd5a359975ce16389cdadae8f677cf46e2839' },
+  { symbol: 'BITCOIN',  feedId: 'c5e0e0c92116c0c070a242b254270441a6201af680a33e0381561c59db3266c9' },
+  { symbol: 'BABYDOGE', feedId: '053e0a17cc9282f191a6e60165dabd4a4861a8847c06eb34f54e07155eebedba' },
+  { symbol: 'YZY',      feedId: 'b0d7b84fd7025b1e62283dd322a3fa7784780516d1b3df7717e86a390b2c97dd' },
+  { symbol: 'USELESS',  feedId: 'f4b55102bfc9ea1bb2342ea2cb050209ed2a398f7c534afbbc5164541861ba23' },
+  { symbol: 'SPX',      feedId: '8414cfadf82f6bed644d2e399c11df21ec0131aa574c56030b132113dbbf3a0a' },
+  // DeFi / Infrastructure
+  { symbol: 'RAY',      feedId: '91568baa8beb53db23eb3fb7f22c6e8bd303d103919e19733f2bb642d3e7987a' },
+  { symbol: 'RENDER',   feedId: '3d4a2bd9535be6ce8059d75eadeba507b043257321aa544717c56fa19b49e35d' },
+  { symbol: 'VIRTUAL',  feedId: '8132e3eb1dac3e56939a16ff83848d194345f6688bff97eb1c8bd462d558802b' },
+  { symbol: 'PYTH',     feedId: '0bbf28e9a841a1cc788f6a361b17ca072d0ea3098a1e5df1c3922d06719579ff' },
+  { symbol: 'W',        feedId: 'eff7446475e218517566ea99e72a4abec2e1bd8498b43b7d8331e29dcb059389' },
+  { symbol: 'JTO',      feedId: 'b43660a5f790c69354b0729a5ef9d50d68f1df92107540210b9cccba1f947cc2' },
+  { symbol: 'GRASS',    feedId: '299ac948742a799d27a1649c76035b26577ad0eb6585a5ae2a691d31f2ee90c4' },
+  { symbol: 'LAYER',    feedId: '3c987d95da67ceb12705b22448200568c15b6242796cacc21c11f622e74cfffb' },
+  { symbol: 'LINK',     feedId: '8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221' },
+  { symbol: 'AAVE',     feedId: '2b9ab1e972a281585084148ba1389800799bd4be63b957507db1349314e47445' },
+  { symbol: 'UNI',      feedId: '78d185a741d07edb3412b09008b7c5cfb9bbbd7d568bf00ba737b456ba171501' },
+  { symbol: 'CAKE',     feedId: '2356af9529a1064d41e32d617e2ce1dca5733afa901daba9e2b68dee5d53ecf9' },
+  { symbol: 'HNT',      feedId: '649fdd7ec08e8e2a20f425729854e90293dcbe2376abc47197a14da6ff339756' },
+  { symbol: 'ORE',      feedId: '142b804c658e14ff60886783e46e5a51bdf398b4871d9d8f7c28aa1585cad504' },
+  { symbol: 'MET',      feedId: '0292e0f405bcd4a496d34e48307f6787349ad2bcd8505c3d3a9f77d81a67a682' },
+  { symbol: 'ORCA',     feedId: '37505261e557e251290b8c8899453064e8d760ed5c65a779726f2490980da74c' },
+  { symbol: 'BAT',      feedId: '8e860fb74e60e5736b455d82f60b3728049c348e94961add5f961b02fdee2535' },
+  { symbol: 'GMT',      feedId: 'baa284eaf23edf975b371ba2818772f93dbae72836bbdea28b07d40f3cf8b485' },
+  { symbol: 'DRIFT',    feedId: '5c1690b27bb02446db17cdda13ccc2c1d609ad6d2ef5bf4983a85ea8b6f19d07' },
+  { symbol: 'HONEY',    feedId: 'f67b033925d73d43ba4401e00308d9b0f26ab4fbd1250e8b5407b9eaade7e1f4' },
+  { symbol: 'KMNO',     feedId: 'b17e5bc5de742a8a378b54c9c75442b7d51e30ada63f28d9bd28d3c0e26511a0' },
+  { symbol: 'MASK',     feedId: 'b97d9aa5c9ea258252456963c3a9547d53e4848cb66ce342a3155520741a28d4' },
+  { symbol: 'MOBILE',   feedId: 'ff4c53361e36a9b837433c87d290c229e1f01aec5ef98d9f3f70953a20a629ce' },
+  { symbol: 'MON',      feedId: '31491744e2dbf6df7fcf4ac0820d18a609b49076d45066d3568424e62f686cd1' },
+  { symbol: 'TNSR',     feedId: '05ecd4597cd48fe13d6cc3596c62af4f9675aee06e2e0b94c06d8bee2b659e05' },
+  { symbol: 'C98',      feedId: '2dd14c7c38aa7066c7a508aac299ebcde5165b07d5d9f2d94dfbfe41f0bc5f2e' },
+  { symbol: 'LUNC',     feedId: '4456d442a152fd1f972b18459263ef467d3c29fb9d667e30c463b086691fbc79' },
+  { symbol: 'FTT',      feedId: '6c75e52531ec5fd3ef253f6062956a8508a2f03fa0a209fb7fbc51efd9d35f88' },
+  { symbol: '1INCH',    feedId: '63f341689d98a12ef60a5cff1d7f85c70a9e17bf1575f0e7c0b2512d48b1c8b3' },
+  { symbol: '2Z',       feedId: 'f2b3ab1c49e35e881003c3c0482d18b181a1560b697b844c24c8f85aba1cab95' },
+  { symbol: 'BMT',      feedId: 'a5fcd936b0178a425663f150dd87175bd8c374bff2ebc1e833ea73a67f721ca2' },
+  // Stock-mirror crypto tokens
+  { symbol: 'NVDAX',    feedId: '4244d07890e4610f46bbde67de8f43a4bf8b569eebe904f136b469f148503b7f' },
+  { symbol: 'METAX',    feedId: 'bf3e5871be3f80ab7a4d1f1fd039145179fb58569e159aee1ccd472868ea5900' },
+  { symbol: 'MCDX',     feedId: '27cac3c00ed32285b8686611bbc4a654279c1ea11ab4dc90822c2edd20734bca' },
+  { symbol: 'TSLAX',    feedId: '47a156470288850a440df3a6ce85a55917b813a19bb5b31128a33a986566a362' },
+  { symbol: 'AAPLX',    feedId: '978e6cc68a119ce066aa830017318563a9ed04ec3a0a6439010fc11296a58675' },
+  { symbol: 'MSTRX',    feedId: '53f95ba4e23ed15ea56083e2ee9a5eec48055d6f59033d4bb95f1ca2a2349c28' },
+  { symbol: 'COINX',    feedId: '641435d5dffb5311140b480517c79986d8488d5cf08a11eec53b83ad02cab33f' },
+  { symbol: 'GOOGLX',   feedId: 'b911b0329028cd0283e4259c33809d62942bd2716a58084e5f31d64c00b5424e' },
+  { symbol: 'QQQX',     feedId: '178a6f73a5aede9d0d682e86b0047c9f333ed0efe5c6537ca937565219c4054d' },
+  { symbol: 'HOODX',    feedId: 'dd49a9ac6df5cbfa9d8fc6371f7ae927a74d5c6763c1c01b4220d70314c647f9' },
+  { symbol: 'NFLXX',    feedId: '02a67e6184e6c9dd65e14745a2a80df8b2b3d2ca91b4b191404936003d9929ae' },
+  { symbol: 'PLTRX',    feedId: '11a70634863ddffb71f2b11f2cff29f73f3db8f6d0b78c49f2b5f4ad36e885f0' },
+  { symbol: 'INTCX',    feedId: 'c1751e085ee292b8b3b9dd122a135614485a201c35dfc653553f0e28c1baf3ff' },
+  { symbol: 'AMZNX',    feedId: 'b5d0e0fa58a1f8b81498ae670ce93c872d14434b72c364885d4fa1b257cbb07a' },
+  { symbol: 'MSFTX',    feedId: 'd0ca23c1cc005e004ccf1db5bf76aeb6a49218f43dac3d4b275e92de12ded4d1' },
+  { symbol: 'ORCLX',    feedId: 'e47ff732eaeb6b4163902bdee61572659ddf326511917b1423bae93fcdf3153c' },
+  { symbol: 'PFEX',     feedId: '0704ad7547b3dfee329266ee53276349d48e4587cb08264a2818288f356efd1d' },
+  { symbol: 'GSX',      feedId: '9c68c0c6999765cf6e27adf75ed551b34403126d3b0d5b686a2addb147ed4554' },
+  { symbol: 'CRMX',     feedId: 'feff234600320f4d6bb5a01d02570a9725c1e424977f2b823f7231e6857bdae8' },
+  { symbol: 'JPMX',     feedId: '7f4f157e57bfcccd934c566df536f34933e74338fe241a5425ce561acdab164e' },
+  { symbol: 'KOX',      feedId: '9aa471dccea36b90703325225ac76189baf7e0cc286b8843de1de4f31f9caa7d' },
+  { symbol: 'CSCOX',    feedId: '3f4b77dd904e849f70e1e812b7811de57202b49bc47c56391275c0f45f2ec481' },
+  { symbol: 'PEPX',     feedId: 'be230eddb16aad5ad273a85e581e74eb615ebf67d378f885768d9b047df0c843' },
+  { symbol: 'HDX',      feedId: 'b3a83dbe70b62241b0f916212e097465a1b31085fa30da3342dd35468ca17ca5' },
+  { symbol: 'CVXX',     feedId: 'f464e36fd4ef2f1c3dc30801a9ab470dcdaaa0af14dd3cf6ae17a7fca9e051c5' },
+  { symbol: 'GME',      feedId: '6f9cd89ef1b7fd39f667101a91ad578b6c6ace4579d5f7f285a4b06aa4504be6' },
+  { symbol: 'VTIX',     feedId: '26c67e91769aeba33a09469c705a1863794014dac416e4270661f489309ae862' },
+];
+
+// Deduplicate
+const COINS = [];
+const seen = new Set();
+for (const c of PYTH_COINS) {
+  if (!seen.has(c.symbol)) {
+    seen.add(c.symbol);
+    COINS.push(c);
+  }
+}
+
+// Coin colors (from CoinDeck + extended palette)
+const COIN_COLORS = {
+  BONK: '#006b58', WIF: '#8993eb', TRUMP: '#c41e3a', FARTCOIN: '#2d5a27',
+  POPCAT: '#d44fa0', MOODENG: '#3ad789', SOL: '#14f195', PNUT: '#6b4e3d',
+  BONK: '#e8732a', GRIFFAIN: '#6a0dad', ZEREBRO: '#1e90ff', MELANIA: '#c71585',
+  FWOG: '#228b22', SEND: '#4169e1', RETARDIO: '#ff6347', VINE: '#32cd32',
+  BAN: '#ffd700', AIXBT: '#00ced1', ELIZA: '#da70d6', ELON: '#b22222',
+  PUMP: '#ff4500', BIO: '#2e8b57', BITCOIN: '#f7931a', BABYDOGE: '#d4a574',
+  YZY: '#333333', USELESS: '#808080', SPX: '#1a5276',
+  RAY: '#5f27cd', RENDER: '#e056fd', VIRTUAL: '#8e44ad', PYTH: '#6c3483',
+  W: '#2980b9', JTO: '#16a085', GRASS: '#27ae60', LAYER: '#2ecc71',
+  LINK: '#2a5ada', AAVE: '#b6509e', UNI: '#ff007a', CAKE: '#d1884f',
+  HNT: '#474dff', ORE: '#c0c0c0', MET: '#4a4a4a', ORCA: '#ffb347',
+  BAT: '#ff5000', GMT: '#e4c87e', DRIFT: '#e040fb', HONEY: '#f0a500',
+  KMNO: '#00bcd4', MASK: '#1c94e0', MOBILE: '#7b68ee', MON: '#ff69b4',
+  TNSR: '#9370db', C98: '#d4a017', LUNC: '#ffd83b', FTT: '#5dade2',
+  '1INCH': '#94333c', '2Z': '#3498db', BMT: '#e67e22',
+  NVDAX: '#76b900', METAX: '#0668E1', MCDX: '#FFC72C', TSLAX: '#cc0000',
+  AAPLX: '#555555', MSTRX: '#c41230', COINX: '#0052ff', GOOGLX: '#4285f4',
+  QQQX: '#00838f', HOODX: '#00c805', NFLXX: '#e50914', PLTRX: '#101010',
+  INTCX: '#0068b5', AMZNX: '#ff9900', MSFTX: '#00a4ef', ORCLX: '#f80000',
+  PFEX: '#0093d0', GSX: '#6f9fd8', CRMX: '#00a1e0', JPMX: '#005eb8',
+  KOX: '#f40009', CSCOX: '#049fd9', PEPX: '#004b93', HDX: '#e87722',
+  CVXX: '#000000', GME: '#ff4500', VTIX: '#003366', WEN: '#ff8c00',
+  AURA: '#ff6b6b', NPC: '#a29bfe', USDUC: '#2ecc71', STNK: '#636e72',
+  DOG: '#fdcb6e', MPLX: '#6c5ce7', LABUBU: '#fab1a0', CARDS: '#0984e3',
+  SAVE: '#00b894', PURPE: '#a855f7', SNS: '#fd79a8', STEP: '#00cec9',
+  SIGMA: '#dfe6e9', PLAY: '#e17055', GLDX: '#f9ca24', SCF: '#badc58',
+  CWIF: '#7ed6df', LETSBONK: '#eb4d4b', MAX: '#f0932b', POWSCHE: '#535c68',
+  ROCKY: '#c44569', SILLY: '#f78fb3', SKR: '#3dc1d3', VX: '#e77f67',
+  'BRK.BX': '#778ca3', CHONKY: '#cf6a87',
+};
+
+// Coin categories
+const COIN_CATEGORIES = {};
+const MEME_SYMBOLS = [
+  'BONK','WIF','POPCAT','WEN','TRUMP','FARTCOIN','PNUT','MOODENG','GRIFFAIN',
+  'ZEREBRO','MELANIA','FWOG','SEND','RETARDIO','VINE','BAN','AIXBT','ELIZA',
+  'ELON','PUMP','BIO','BITCOIN','BABYDOGE','YZY','USELESS','SPX',
+  'AURA','NPC','USDUC','STNK','DOG','LABUBU','CARDS','PURPE',
+  'SIGMA','CWIF','LETSBONK','MAX','POWSCHE','ROCKY','SILLY','CHONKY',
+];
+const DEFI_SYMBOLS = [
+  'RAY','RENDER','VIRTUAL','PYTH','W','JTO','GRASS','LAYER','LINK','AAVE',
+  'UNI','CAKE','HNT','ORE','MET','ORCA','BAT','GMT','DRIFT','HONEY','KMNO',
+  'MASK','MOBILE','MON','TNSR','C98','LUNC','FTT','1INCH','2Z','BMT',
+  'MPLX','SAVE','SNS','STEP','PLAY','SCF','SKR','VX',
+];
+const STOCK_SYMBOLS = [
+  'NVDAX','METAX','MCDX','TSLAX','AAPLX','MSTRX','COINX','GOOGLX','QQQX',
+  'HOODX','NFLXX','PLTRX','INTCX','AMZNX','MSFTX','ORCLX','PFEX','GSX',
+  'CRMX','JPMX','KOX','CSCOX','PEPX','HDX','CVXX','GME','VTIX','GLDX','BRK.BX',
+];
+
+for (const s of MEME_SYMBOLS) COIN_CATEGORIES[s] = 'Meme';
+for (const s of DEFI_SYMBOLS) COIN_CATEGORIES[s] = 'DeFi';
+for (const s of STOCK_SYMBOLS) COIN_CATEGORIES[s] = 'Stock';
+
+class PriceService {
+  constructor() {
+    this.tokens = {};
+    this.coins = COINS;
+    this.nonPythCoins = NON_PYTH_COINS;
+    this.listeners = [];
+    this._pollInterval = null;
+    this._railwayPollInterval = null;
+  }
+
+  async fetchPrices() {
+    try {
+      const BATCH_SIZE = 40;
+      const batches = [];
+      for (let i = 0; i < this.coins.length; i += BATCH_SIZE) {
+        batches.push(this.coins.slice(i, i + BATCH_SIZE));
+      }
+
+      const results = await Promise.all(batches.map(async (batch) => {
+        try {
+          const params = batch.map(c => `ids[]=${c.feedId}`).join('&');
+          const resp = await fetch(`${HERMES_URL}?${params}&parsed=true`);
+          if (!resp.ok) throw new Error(`Hermes ${resp.status}`);
+          const data = await resp.json();
+          return data.parsed || [];
+        } catch (e) {
+          console.warn('Pyth batch failed:', e.message);
+          return [];
+        }
+      }));
+
+      const priceMap = {};
+      for (const parsed of results) {
+        for (const entry of parsed) priceMap[entry.id] = entry;
+      }
+
+      for (const coin of this.coins) {
+        const entry = priceMap[coin.feedId];
+        if (!entry || !entry.price) continue;
+
+        const priceData = entry.price;
+        const emaData = entry.ema_price;
+        const price = parseFloat(priceData.price) * Math.pow(10, priceData.expo);
+        const confidence = parseFloat(priceData.conf) * Math.pow(10, priceData.expo);
+        const emaPrice = emaData ? parseFloat(emaData.price) * Math.pow(10, emaData.expo) : price;
+
+        this.tokens[coin.symbol] = {
+          ...this.tokens[coin.symbol],
+          name: coin.symbol,
+          price,
+          confidence,
+          emaPrice,
+          publishTime: priceData.publish_time,
+          source: 'pyth',
+        };
+        this.listeners.forEach(fn => fn(coin.symbol, this.tokens[coin.symbol]));
+      }
+      return true;
+    } catch (err) {
+      console.error('Pyth fetch error:', err);
+      return false;
+    }
+  }
+
+  async fetchRailwayPrices() {
+    if (this.nonPythCoins.length === 0) return true;
+    try {
+      const tickers = this.nonPythCoins.map(s => `$${s}`).join(',');
+      const resp = await fetch(`${RAILWAY_API_URL}?tickers=${tickers}`);
+      if (!resp.ok) throw new Error(`Railway ${resp.status}`);
+      const data = await resp.json();
+      const rows = Array.isArray(data) ? data : (data.data || []);
+      for (const row of rows) {
+        const symbol = (row.ticker || '').replace(/^\$/, '');
+        if (!symbol) continue;
+        this.tokens[symbol] = {
+          name: symbol,
+          price: row.price || 0,
+          confidence: 0,
+          emaPrice: 0,
+          publishTime: row.ts ? Math.floor(new Date(row.ts).getTime() / 1000) : 0,
+          source: 'railway',
+          change7d: row.change_7d || 0,
+          volume24h: row.volume || 0,
+          marketCap: row.market_cap || 0,
+          railwayPower: row.power || 0,
+        };
+        this.listeners.forEach(fn => fn(symbol, this.tokens[symbol]));
+      }
+      return true;
+    } catch (err) {
+      console.error('Railway fetch error:', err);
+      return false;
+    }
+  }
+
+  async fetchAllMarketCaps() {
+    try {
+      const allSymbols = [
+        ...this.coins.map(c => c.symbol),
+        ...this.nonPythCoins,
+      ];
+      const BATCH_SIZE = 40;
+      const batches = [];
+      for (let i = 0; i < allSymbols.length; i += BATCH_SIZE) {
+        batches.push(allSymbols.slice(i, i + BATCH_SIZE));
+      }
+
+      const results = await Promise.all(batches.map(async (batch) => {
+        const tickers = batch.map(s => `$${s}`).join(',');
+        const resp = await fetch(`${RAILWAY_API_URL}?tickers=${tickers}`);
+        if (!resp.ok) throw new Error(`Railway ${resp.status}`);
+        return resp.json();
+      }));
+
+      for (const data of results) {
+        const rows = Array.isArray(data) ? data : (data.data || []);
+        for (const row of rows) {
+          const symbol = (row.ticker || '').replace(/^\$/, '');
+          if (!symbol) continue;
+          if (this.tokens[symbol]) {
+            this.tokens[symbol].marketCap = row.market_cap || 0;
+            this.tokens[symbol].change7d = row.change_7d || this.tokens[symbol].change7d || 0;
+            this.tokens[symbol].volume24h = row.volume || this.tokens[symbol].volume24h || 0;
+          } else {
+            this.tokens[symbol] = {
+              name: symbol, price: row.price || 0,
+              marketCap: row.market_cap || 0, change7d: row.change_7d || 0,
+              volume24h: row.volume || 0, source: 'railway',
+            };
+          }
+        }
+      }
+      return true;
+    } catch (err) {
+      console.error('Market cap fetch error:', err);
+      return false;
+    }
+  }
+
+  getMarketCap(symbol) {
+    return (this.tokens[symbol] && this.tokens[symbol].marketCap) || 0;
+  }
+
+  getSpeedMultiplier(symbol) {
+    const cap = this.getMarketCap(symbol);
+    if (!cap || cap <= 0) return 1;
+    const logCap = Math.log10(cap);
+    const normalized = Math.max(0, Math.min(1, (logCap - 5) / 6));
+    return 1.4 - (normalized * 0.8);
+  }
+
+  getBaseHP(symbol) {
+    const cap = this.getMarketCap(symbol);
+    if (!cap || cap <= 0) return 80;
+    const logCap = Math.log10(cap);
+    if (logCap >= 10.7) return 300;
+    if (logCap >= 9.7) return Math.round(200 + (logCap - 9.7) * 100);
+    if (logCap >= 8.7) return Math.round(120 + (logCap - 8.7) * 80);
+    if (logCap >= 7.7) return Math.round(70 + (logCap - 7.7) * 50);
+    if (logCap >= 6.7) return Math.round(40 + (logCap - 6.7) * 30);
+    return 20;
+  }
+
+  getBaseDamage(symbol) {
+    const token = this.tokens[symbol];
+    if (!token) return 12;
+    const volatility = Math.abs(token.change7d || 0);
+    if (volatility >= 30) return 40;
+    if (volatility >= 15) return Math.round(25 + (volatility - 15) / 15 * 15);
+    if (volatility >= 5) return Math.round(15 + (volatility - 5) / 10 * 10);
+    return Math.round(8 + volatility / 5 * 7);
+  }
+
+  getCombatStats(symbol) {
+    const token = this.tokens[symbol];
+    if (!token) return null;
+    return {
+      hp: this.getBaseHP(symbol),
+      damage: this.getBaseDamage(symbol),
+      speedMultiplier: this.getSpeedMultiplier(symbol),
+      marketCap: token.marketCap || 0,
+      volatility: Math.abs(token.change7d || 0),
+    };
+  }
+
+  calcPower(symbol) {
+    const token = this.tokens[symbol];
+    if (!token) return 0;
+    if (token.source === 'railway') return parseFloat((token.railwayPower || 0).toFixed(1));
+    if (!token.emaPrice || token.emaPrice === 0) return 0;
+    const momentum = (token.price - token.emaPrice) / token.emaPrice;
+    return parseFloat((momentum * POWER_SCALE).toFixed(1));
+  }
+
+  getTokenRole(symbol) {
+    const cap = this.getMarketCap(symbol);
+    if (!cap || cap <= 0) return 'Fighter';
+    if (cap >= 5e9) return 'Tank';
+    if (cap >= 500e6) return 'Fighter';
+    return 'Glass Cannon';
+  }
+
+  getRealtimeMultipliers(symbol) {
+    const power = this.calcPower(symbol);
+    const pct = power / 10;
+    let dmgMult = 1, defMult = 1, label = 'Neutral';
+
+    if (pct > 10) {
+      dmgMult = 1 + (pct / 10); defMult = 0.8; label = 'Pumping Hard';
+    } else if (pct > 1) {
+      dmgMult = 1 + (pct / 20); defMult = 1; label = 'Steady Green';
+    } else if (pct > -1) {
+      dmgMult = 1; defMult = 1; label = 'Crabbing';
+    } else if (pct > -10) {
+      dmgMult = 0.5; defMult = 1 + (Math.abs(pct) / 10); label = 'Dipping';
+    } else {
+      dmgMult = 0.25; defMult = 1 + (Math.abs(pct) / 5); label = 'Dumping Hard';
+    }
+
+    let specialEvent = null;
+    if (pct < -25) specialEvent = 'Rug Pull';
+    if (pct > 50) specialEvent = 'Moon Shot';
+
+    return { dmgMult, defMult, label, specialEvent, pct };
+  }
+
+  getTokenWithPower(symbol) {
+    const token = this.tokens[symbol];
+    if (!token) return null;
+    return { id: symbol, ...token, power: this.calcPower(symbol) };
+  }
+
+  getCategory(symbol) {
+    return COIN_CATEGORIES[symbol] || 'Other';
+  }
+
+  getColor(symbol) {
+    return COIN_COLORS[symbol] || '#666666';
+  }
+
+  getAllTokensWithPower() {
+    return Object.keys(this.tokens)
+      .map(sym => this.getTokenWithPower(sym))
+      .filter(Boolean)
+      .sort((a, b) => b.power - a.power);
+  }
+
+  startPolling(intervalMs = 3000) {
+    this.fetchPrices();
+    this.fetchRailwayPrices();
+    this.fetchAllMarketCaps();
+
+    this._pollInterval = setInterval(() => this.fetchPrices(), intervalMs);
+    this._railwayPollInterval = setInterval(() => {
+      this.fetchRailwayPrices();
+      this.fetchAllMarketCaps();
+    }, 5 * 60 * 1000);
+  }
+
+  stopPolling() {
+    if (this._pollInterval) { clearInterval(this._pollInterval); this._pollInterval = null; }
+    if (this._railwayPollInterval) { clearInterval(this._railwayPollInterval); this._railwayPollInterval = null; }
+  }
+
+  onPriceUpdate(callback) {
+    this.listeners.push(callback);
+    return () => { this.listeners = this.listeners.filter(fn => fn !== callback); };
+  }
+}
+
+export const priceService = new PriceService();
+export default PriceService;
