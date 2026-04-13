@@ -256,10 +256,10 @@ class PriceService {
           emaPrice: 0,
           publishTime: row.ts ? Math.floor(new Date(row.ts).getTime() / 1000) : 0,
           source: 'railway',
-          change7d: row.change_7d || 0,
-          volume24h: row.volume || 0,
-          marketCap: row.market_cap || 0,
-          railwayPower: row.power || 0,
+          change7d: parseFloat(row.change_7d) || 0,
+          volume24h: parseFloat(row.volume) || 0,
+          marketCap: parseFloat(row.market_cap) || 0,
+          railwayPower: parseFloat(row.power) || 0,
         };
         this.listeners.forEach(fn => fn(symbol, this.tokens[symbol]));
       }
@@ -363,7 +363,7 @@ class PriceService {
   calcPower(symbol) {
     const token = this.tokens[symbol];
     if (!token) return 0;
-    if (token.source === 'railway') return parseFloat((token.railwayPower || 0).toFixed(1));
+    if (token.source === 'railway') return parseFloat(Number(token.railwayPower || 0).toFixed(1));
     if (!token.emaPrice || token.emaPrice === 0) return 0;
     const momentum = (token.price - token.emaPrice) / token.emaPrice;
     return parseFloat((momentum * POWER_SCALE).toFixed(1));
@@ -394,11 +394,7 @@ class PriceService {
       dmgMult = 0.25; defMult = 1 + (Math.abs(pct) / 5); label = 'Dumping Hard';
     }
 
-    let specialEvent = null;
-    if (pct < -25) specialEvent = 'Rug Pull';
-    if (pct > 50) specialEvent = 'Moon Shot';
-
-    return { dmgMult, defMult, label, specialEvent, pct };
+    return { dmgMult, defMult, label, pct };
   }
 
   getTokenWithPower(symbol) {
